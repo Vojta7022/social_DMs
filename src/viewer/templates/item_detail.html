@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% from "_macros.html" import media_thumb, comment_branch %}
+
+{% block content %}
+  {% set metrics = item.get('metrics', {}) if item else {} %}
+  {% set vibe_score = item.get('vibe_score') if item else none %}
+  {% set vibe_label = item.get('vibe_label') if item else none %}
+  {% set sentiment = item.get('sentiment', {}) if item else {} %}
+  {% set comment_total = metrics.get('comments') %}
+  <section class="detail-head">
+    <div>
+      <a href="{{ back_to_url }}" class="back-link">← Back to {{ item.kind }}</a>
+      <span class="eyebrow">{{ item.kind[:-1] if item.kind.endswith('s') else item.kind }}</span>
+      <h1>{{ item.title }}</h1>
+      <p class="username"><a class="inline-link" href="{{ instagram_profile_url(profile.username) }}" target="_blank" rel="noreferrer">@{{ profile.username }}</a></p>
+    </div>
+    <div class="badge-row">
+      <span class="metric-pill">{{ item.item_id }}</span>
+      {% if item.collection_name %}<span class="metric-pill">{{ item.collection_name }}</span>{% endif %}
+      {% if item.post_type %}<span class="metric-pill">{{ item.post_type }}</span>{% endif %}
+      {% if item.story_type %}<span class="metric-pill">{{ item.story_type }}</span>{% endif %}
+    </div>
+  </section>
+
+  <section class="detail-grid">
+    <article class="panel panel-media">
+      <div class="section-head">
+        <h2>Media</h2>
+        <p>{{ item.media_assets|length }} archived file{% if item.media_assets|length != 1 %}s{% endif %}</p>
+      </div>
+      <div class="detail-media-grid">
+        {% for asset in item.media_assets %}
+          <div class="detail-media-card">
+            {{ media_thumb(asset, item.title, true) }}
+            <div class="detail-media-meta">
+              <strong>{{ asset.filename }}</strong>
+              <span>{{ asset.media_type }}</span>
+              <span>{{ asset.file_size|filesize }}</span>
+              {% if asset.width and asset.height %}<span>{{ asset.width }} × {{ asset.height }}</span>{% endif %}
+              {% if asset.get('duration_s') is not none %}<span>{{ '%.1f'|format(asset.get('duration_s')) }}s</span>{% endif %}
+              {% if asset.get('has_audio') is not none %}<span>{% if asset.get('has_audio') %}audio{% else %}mute{% endif %}</span>{% endif %}
+            </div>
+          </div>
+        {% else %}
+          <div class="empty-panel compact">
+            <p>{% if item.kind == 'reposts' %}This repost is stored as metadata-only history, so no repost media files are archived.{% else %}No saved media paths were found for this item.{% endif %}</p>
+          </div>
+        {% endfor %}
+      </div>
+    </article>
+
+    <article class="panel">
+      <div class="section-head">
+        <h2>Metadata</h2>
+        <p>Archive metadata merged from the profile bundle and item sidecar.</p>
+      </div>
+      <dl class="metadata-grid">
+        <div><dt>ID</dt><dd>{{ item.item_id }}</dd></div>
+        <div><dt>Posted</dt><dd>{{ item.posted_at|datetime }}</dd></div>
+        <div><dt>Discovered</dt><dd>{{ item.discovered_at|datetime }}</dd></div>
+        {% if item.expires_at is defined %}<div><dt>Expires</dt><dd>{{ item.expires_at|datetime }}</dd></div>{% endif %}
+        <div><dt>External URL</dt><dd>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noreferrer">Open source URL</a>{% else %}—{% endif %}</dd></div>
+        {% if metrics %}
+          <div><dt>Likes</dt><dd>{{ metrics.get('likes')|human_number }}</dd></div>
+          <div><dt>Comments</dt><dd>{{ metrics.get('comments')|human_number }}</dd></div>
+          <div><dt>Views</dt><dd>{{ metrics.get('views')|human_number }}</dd></div>
+          <div><dt>Shares</dt><dd>{{ metrics.get('shares')|human_number }}</dd></div>
+        {% endif %}
+        {% if vibe_score is not none %}<div><dt>Vibe score</dt><dd>{{ '%.2f'|format(vibe_score) }}{% if vibe_label %} ({{ vibe_label }}){% endif %}</dd></div>{% endif %}
+        {% if item.repost_source_account %}<div><dt>Repost source</dt><dd><a class="inline-link" href="{{ platform_profile_url(item.source_platform or profile.platform, item.repost_source_account) }}" target="_blank" rel="noreferrer">@{{ item.repost_source_account }}</a></dd></div>{% endif %}
+        {% if item.repost_source_url %}<div><dt>Repost URL</dt><dd><a href="{{ item.repost_source_url }}" target="_blank" rel="noreferrer">Open source</a></dd></div>{% endif %}
+        {% if item.behavior_category %}<div><dt>Behavior category</dt><dd>{{ item.behavior_category }}{% if item.behavior_confidence is not none %} ({{ item.behavior_confidence }}){% endif %}</dd></div>{% endif %}
+      </dl>
+
+      {% if item.caption %}
+        <div class="rich-block">
+          <h3>Caption</h3>
+          <p>{{ item.caption|instagram_links }}</p>
+        </div>
+      {% endif %}
+
+      {% if item.text_blob %}
+        <div class="rich-block">
+          <h3>Saved text file</h3>
+          <pre>{{ item.text_blob }}</pre>
+        </div>
+      {% endif %}
+
+      {% if item.geoparsed_locations %}
+        <div class="rich-block">
+          <h3>Location candidates</h3>
+          <div class="event-list">
+            {% for location in item.geoparsed_locations %}
+              <div class="event-card">
+                <strong>{{ location.name }}</strong>
+                <span>confidence {{ location.max_confidence }}</span>
+                {% if location.source_types %}<span>{{ location.source_types|join(', ') }}</span>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+      {% if item.kind in ['posts', 'mentions', 'reposts'] %}
+        {% if sentiment %}
+          <div class="rich-block">
+            <h3>Sentiment</h3>
+            {% if sentiment.get('status') == 'ready' %}
+              <p>Overall vibe: <strong>{{ '%.2f'|format(sentiment.get('vibe_score', 0)) }}</strong> ({{ sentiment.get('label') }})</p>
+              {% if sentiment.get('caption') %}
+                <p>Caption compound: {{ '%.2f'|format(sentiment.get('caption', {}).get('compound', 0)) }}</p>
+              {% endif %}
+              {% set sentiment_comments = sentiment.get('comments', {}) %}
+              {% if sentiment_comments and sentiment_comments.get('count_scored') %}
+                <p>Comments scored: {{ sentiment_comments.get('count_scored') }} with average compound {{ '%.2f'|format(sentiment_comments.get('average_compound', 0)) }}</p>
+              {% endif %}
+            {% elif sentiment.get('status') == 'dependency_missing' %}
+              <p class="content-subtle">Install `vaderSentiment` to generate local vibe scores for captions and comments.</p>
+            {% else %}
+              <p class="content-subtle">No caption or comment text was available for sentiment scoring.</p>
+            {% endif %}
+          </div>
+        {% endif %}
+
+        <div class="rich-block">
+          <h3>Liked by</h3>
+          {% if item.sidecar and item.sidecar.liked_by_users %}
+            <p>{{ item.sidecar.liked_by_users|length }} archived user{% if item.sidecar.liked_by_users|length != 1 %}s{% endif %}</p>
+          {% else %}
+            <p class="content-subtle">Per-user like lists are not archived yet in the current scraper output.</p>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if item.sidecar and item.sidecar.owner %}
+        <div class="rich-block">
+          <h3>Owner</h3>
+          <p><a class="inline-link" href="{{ platform_profile_url(profile.platform, item.sidecar.owner.username or profile.username) }}" target="_blank" rel="noreferrer">@{{ item.sidecar.owner.username or profile.username }}</a></p>
+          {% if item.sidecar.owner.display_name %}<p>{{ item.sidecar.owner.display_name }}</p>{% endif %}
+        </div>
+      {% endif %}
+    </article>
+  </section>
+
+  {% if item.extra_media_assets %}
+    <section class="panel">
+      <div class="section-head">
+        <h2>Extra Visual Candidates</h2>
+        <p>Image candidates found in the archived metadata but not yet stored as the main saved media.</p>
+      </div>
+      <div class="detail-media-grid">
+        {% for asset in item.extra_media_assets %}
+          <div class="detail-media-card">
+            {{ media_thumb(asset, item.title, true) }}
+            <div class="detail-media-meta">
+              <strong>{{ asset.filename }}</strong>
+              <span>{{ asset.source or 'metadata_candidate' }}</span>
+              {% if asset.width and asset.height %}<span>{{ asset.width }} × {{ asset.height }}</span>{% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  {% if item.comment_tree %}
+    <section class="panel">
+      <div class="section-head">
+        <h2>Comments</h2>
+        <p>Threaded view from the archived comment tree.</p>
+      </div>
+      {{ comment_branch(item.comment_tree, profile.platform) }}
+    </section>
+  {% elif item.kind in ['posts', 'mentions', 'reposts'] and (comment_total or item.get('comments_unavailable_reason')) %}
+    <section class="panel">
+      <div class="section-head">
+        <h2>Comments</h2>
+        <p>No archived comment tree is available for this snapshot.</p>
+      </div>
+      <p class="content-subtle">
+        {% if comment_total %}
+          {{ comment_total|human_number }} comment{% if comment_total != 1 %}s were{% else %} was{% endif %} reported on the platform, but none were archived for this snapshot.
+        {% else %}
+          No archived comments are available for this snapshot.
+        {% endif %}
+      </p>
+      {% if item.get('comments_unavailable_reason') %}
+        <p class="content-subtle">Reason: {{ item.get('comments_unavailable_reason') }}</p>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  {% if item.comment_history_tree and item.comment_history_tree != item.comment_tree %}
+    <section class="panel">
+      <div class="section-head">
+        <h2>Comment History</h2>
+        <p>All comments ever archived for this post, including ones that later disappeared from the live platform.</p>
+      </div>
+      {{ comment_branch(item.comment_history_tree, profile.platform) }}
+    </section>
+  {% endif %}
+
+  {% if item.sidecar and item.sidecar.metadata %}
+    <section class="panel">
+      <div class="section-head">
+        <h2>Parsed story metadata</h2>
+        <p>Story/highlight detail extracted from the archive sidecar.</p>
+      </div>
+      <pre class="raw-json">{{ item.sidecar.metadata|pretty_json }}</pre>
+    </section>
+  {% endif %}
+
+  <section class="panel">
+    <details class="raw-block">
+      <summary>Raw metadata</summary>
+      <pre class="raw-json">{{ item.raw_metadata|pretty_json }}</pre>
+    </details>
+  </section>
+{% endblock %}

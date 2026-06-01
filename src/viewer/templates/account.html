@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% from "_macros.html" import stat_tile %}
+
+{% block content %}
+  <section class="profile-hero">
+    <div class="profile-hero-head">
+      <div class="avatar-wrap avatar-wrap-large">
+        {% if account.profile_pic_url %}
+          <img src="{{ account.profile_pic_url }}" alt="{{ account.username }}" class="avatar avatar-large">
+        {% else %}
+          <div class="avatar avatar-large avatar-fallback">{{ account.username[:2]|upper }}</div>
+        {% endif %}
+      </div>
+      <div class="profile-hero-copy">
+        <div class="profile-line">
+          <span class="platform-pill">{{ account.platform }}</span>
+          <span class="own-pill">owned account</span>
+        </div>
+        <h1>{{ account.display_name }}</h1>
+        <p class="username"><a class="inline-link" href="{{ platform_profile_url(account.platform, account.username) }}" target="_blank" rel="noreferrer">@{{ account.username }}</a></p>
+        {% if account.bio_text %}
+          <p class="profile-bio profile-bio-large">{{ account.bio_text|instagram_links }}</p>
+        {% else %}
+          <p class="profile-bio profile-bio-large">Account-level archive with DM conversations exported from the owned login session.</p>
+        {% endif %}
+        <div class="profile-subline">
+          <span>Last message {{ account.last_message_at|datetime }}</span>
+          <span>Latest scrape {{ account.last_scraped_at|datetime }}</span>
+          <span>Bundle updated {{ account.generated_at|datetime }}</span>
+        </div>
+        <div class="action-row">
+          {% if account.linked_profile.available %}
+            <a class="button-secondary" href="{{ account.linked_profile.detail_url }}">Open Profile Archive</a>
+          {% endif %}
+          <a class="button-secondary" href="{{ platform_profile_url(account.platform, account.username) }}" target="_blank" rel="noreferrer">Open Live Profile</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-stats hero-stats-profile">
+      {{ stat_tile('Conversations', account.archive_counts.conversations|human_number, 'accent-gold') }}
+      {{ stat_tile('Messages', account.archive_counts.messages|human_number) }}
+      {{ stat_tile('Attachments', account.archive_counts.attachments|human_number, 'accent-coral') }}
+      {{ stat_tile('Followers', account.bio_follower_count|human_number) }}
+    </div>
+  </section>
+
+  <nav class="tab-strip">
+    {% for tab in tabs %}
+      <a href="{{ tab.url }}" class="tab-link {% if active_tab == tab.key %}is-active{% endif %}">{{ tab.label }}</a>
+    {% endfor %}
+  </nav>
+
+  {% if active_tab == 'overview' %}
+    <section class="overview-grid">
+      <article class="panel">
+        <h2>Archive summary</h2>
+        <div class="summary-list">
+          <div><span>Conversations</span><strong>{{ account.archive_counts.conversations|human_number }}</strong></div>
+          <div><span>Messages</span><strong>{{ account.archive_counts.messages|human_number }}</strong></div>
+          <div><span>Attachments</span><strong>{{ account.archive_counts.attachments|human_number }}</strong></div>
+          <div><span>Feed posts</span><strong>{{ account.bio_post_count|human_number }}</strong></div>
+          <div><span>Following</span><strong>{{ account.bio_following_count|human_number }}</strong></div>
+          <div><span>Latest message</span><strong>{{ account.last_message_at|datetime }}</strong></div>
+          <div><span>Latest scrape</span><strong>{{ account.last_scraped_at|datetime }}</strong></div>
+          <div><span>Bundle generated</span><strong>{{ account.generated_at|datetime }}</strong></div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Recent threads</h2>
+        <div class="event-list">
+          {% for conversation in account.recent_conversations %}
+            <a class="event-card" href="{{ conversation.detail_url }}">
+              <strong>{{ conversation.display_title }}</strong>
+              <span>{{ conversation.last_message_at|datetime }}</span>
+              <span>{{ conversation.message_count|human_number }} messages · {{ conversation.attachment_count|human_number }} attachments</span>
+            </a>
+          {% else %}
+            <p>No DM conversations have been archived yet. Run <code>python3 src/main.py --run-now dms --account {{ account.platform }}:{{ account.username }}</code>.</p>
+          {% endfor %}
+        </div>
+      </article>
+    </section>
+  {% endif %}
+
+  {% if active_tab == 'messages' %}
+    <section class="conversation-grid">
+      {% for conversation in account.conversations %}
+        <article class="conversation-card js-card-link" data-href="{{ conversation.detail_url }}" tabindex="0" role="link" aria-label="Open conversation {{ conversation.display_title }}">
+          <div class="conversation-head">
+            <div class="profile-head">
+              <div class="avatar-wrap">
+                {% if conversation.primary_profile and conversation.primary_profile.profile_pic_url %}
+                  <img src="{{ conversation.primary_profile.profile_pic_url }}" alt="{{ conversation.display_title }}" class="avatar">
+                {% else %}
+                  <div class="avatar avatar-fallback">{{ conversation.display_title[:2]|upper }}</div>
+                {% endif %}
+              </div>
+              <div>
+              <div class="profile-line">
+                <span class="platform-pill">{{ conversation.conversation_type }}</span>
+                {% if conversation.is_group %}
+                  <span class="metric-pill">group</span>
+                {% endif %}
+              </div>
+              <h3>{{ conversation.display_title }}</h3>
+              </div>
+            </div>
+            <span class="metric-pill">{{ conversation.last_message_at|datetime }}</span>
+          </div>
+          <p class="generated-at">{{ conversation.last_message_preview or 'No preview saved yet.' }}</p>
+          <div class="badge-row">
+            {% for profile in conversation.participant_profiles[:5] %}
+              {% if profile.available %}
+                <a class="metric-pill" href="{{ profile.detail_url }}">{{ profile.display_name }}</a>
+              {% else %}
+                <span class="metric-pill">@{{ profile.username }}</span>
+              {% endif %}
+            {% endfor %}
+          </div>
+          <div class="mini-stats">
+            <span>{{ conversation.message_count|human_number }} messages</span>
+            <span>{{ conversation.attachment_count|human_number }} attachments</span>
+          </div>
+        </article>
+      {% else %}
+        <article class="empty-panel">
+          <h2>No conversations archived</h2>
+          <p>This account has not exported any DM conversations yet.</p>
+        </article>
+      {% endfor %}
+    </section>
+  {% endif %}
+{% endblock %}

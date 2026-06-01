@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% from "_macros.html" import stat_tile %}
+
+{% block content %}
+  <section class="hero-panel">
+    <div class="hero-copy">
+      <span class="eyebrow">Archive Dashboard</span>
+      <h1>Browse your scraped social archive without touching the database.</h1>
+      <p>The viewer reads the generated profile bundles and saved media directly from disk, so you can inspect photos, videos, metadata, comments, stories, highlights, and connection snapshots in one place.</p>
+    </div>
+    <div class="hero-stats">
+      {{ stat_tile('Profiles', stats.profiles|human_number, 'accent-gold') }}
+      {{ stat_tile('Posts', stats.posts|human_number) }}
+      {{ stat_tile('Mentions', stats.mentions|human_number) }}
+      {{ stat_tile('Stories', stats.stories|human_number) }}
+      {{ stat_tile('Highlights', stats.highlights|human_number, 'accent-coral') }}
+    </div>
+  </section>
+
+  <section class="toolbar-panel">
+    <form class="toolbar-form" method="get">
+      <label>
+        <span>Platform</span>
+        <select name="platform">
+          <option value="">All platforms</option>
+          {% for value in platforms %}
+            <option value="{{ value }}" {% if selected_platform == value %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="toolbar-search">
+        <span>Search</span>
+        <input type="search" name="q" value="{{ search_query }}" placeholder="username, display name, bio, post id, story id">
+      </label>
+      <label>
+        <span>Account scope</span>
+        <select name="scope">
+          {% for value, label in profile_scope_options %}
+            <option value="{{ value }}" {% if selected_scope == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Content filter</span>
+        <select name="content">
+          {% for value, label in profile_content_options %}
+            <option value="{{ value }}" {% if selected_content == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Sort accounts</span>
+        <select name="sort_profiles">
+          {% for value, label in profile_sort_options %}
+            <option value="{{ value }}" {% if selected_profile_sort == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Direction</span>
+        <select name="profile_dir">
+          <option value="asc" {% if selected_profile_dir == 'asc' %}selected{% endif %}>Ascending</option>
+          <option value="desc" {% if selected_profile_dir == 'desc' %}selected{% endif %}>Descending</option>
+        </select>
+      </label>
+      <button type="submit" class="button-primary">Filter</button>
+      <a class="button-secondary" href="{{ request.url_for('dashboard') }}">Clear</a>
+    </form>
+  </section>
+
+  {% if search_query %}
+    <section class="toolbar-panel">
+      <div class="search-results-head">
+        <div>
+          <span class="eyebrow">Item Search</span>
+          <h2>Matching archived items</h2>
+          <p>Paste a post ID, story ID, or source URL to jump straight into a saved item.</p>
+        </div>
+        <span class="metric-pill">{{ item_matches|length|human_number }} matches</span>
+      </div>
+
+      {% if item_matches %}
+        <div class="profiles-grid">
+          {% for item in item_matches %}
+            <article class="profile-card js-card-link" data-href="{{ item.detail_url }}" tabindex="0" role="link" aria-label="Open archived item {{ item.item_id }}">
+              <div class="profile-card-link item-result-copy">
+                <div class="profile-line">
+                  <span class="platform-pill">{{ item.platform }}</span>
+                  <span class="metric-pill">{{ item.kind }}</span>
+                  {% if item.content_scope %}
+                    <span class="metric-pill">{{ item.content_scope }}</span>
+                  {% endif %}
+                </div>
+
+                <div>
+                  <h2>{{ item.title or item.item_id }}</h2>
+                  <p class="generated-at"><code>{{ item.item_id }}</code></p>
+                </div>
+
+                <p class="generated-at">
+                  Archived under
+                  <a class="inline-link" href="{{ platform_profile_url(item.platform, item.username) }}" target="_blank" rel="noreferrer">@{{ item.username }}</a>
+                </p>
+
+                {% if item.caption and item.caption != item.title %}
+                  <p class="profile-bio">{{ item.caption|instagram_links }}</p>
+                {% endif %}
+
+                <div class="mini-stats">
+                  <span>{{ item.posted_at|datetime }}</span>
+                  <span>{{ item.media_count|human_number }} media files</span>
+                </div>
+
+                <div class="mini-stats">
+                  <span>{% if item.likes is not none %}{{ item.likes|human_number }} likes{% else %}Likes unavailable{% endif %}</span>
+                  <span>{% if item.comments is not none %}{{ item.comments|human_number }} comments{% else %}Comments unavailable{% endif %}</span>
+                </div>
+
+                {% if item.url %}
+                  <p class="generated-at"><a class="inline-link" href="{{ item.url }}" target="_blank" rel="noreferrer">Open source item</a></p>
+                {% endif %}
+              </div>
+              <div class="profile-card-actions">
+                <a href="{{ item.detail_url }}" class="button-secondary profile-open-link">Open Archived Item</a>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <article class="empty-panel compact">
+          <h2>No item IDs matched</h2>
+          <p>This search currently checks archived item IDs and saved source URLs.</p>
+        </article>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  <section class="profiles-grid">
+    {% for profile in profiles %}
+      <article class="profile-card js-card-link" data-href="{{ profile.detail_url }}" tabindex="0" role="link" aria-label="Open archive for {{ profile.display_name }}">
+        <div class="profile-card-link">
+          <div class="profile-head">
+            <div class="avatar-wrap">
+              {% if profile.profile_pic_url %}
+                <img src="{{ profile.profile_pic_url }}" alt="{{ profile.username }}" class="avatar">
+              {% else %}
+                <div class="avatar avatar-fallback">{{ profile.username[:2]|upper }}</div>
+              {% endif %}
+            </div>
+            <div class="profile-copy">
+              <div class="profile-line">
+                <span class="platform-pill">{{ profile.platform }}</span>
+                {% if profile.is_own_account %}
+                  <span class="own-pill">own account</span>
+                {% endif %}
+              </div>
+              <h2>{{ profile.display_name }}</h2>
+              <p class="username"><a class="inline-link" href="{{ instagram_profile_url(profile.username) }}" target="_blank" rel="noreferrer">@{{ profile.username }}</a></p>
+            </div>
+          </div>
+
+          {% if profile.bio_text %}
+            <p class="profile-bio">{{ profile.bio_text|instagram_links }}</p>
+          {% endif %}
+
+          <div class="mini-stats">
+            <span>{{ profile.counts.posts|human_number }} archived posts</span>
+            <span>{{ profile.counts.mentions|human_number }} mentions</span>
+            <span>{{ profile.counts.stories|human_number }} stories</span>
+            <span>{{ profile.counts.highlights|human_number }} highlights</span>
+          </div>
+
+          {% if profile.bio_post_count and profile.bio_post_count != profile.counts.posts %}
+            <p class="generated-at">Profile shows {{ profile.bio_post_count|human_number }} total feed posts on Instagram.</p>
+          {% endif %}
+
+          <div class="mini-stats">
+            <span>{{ profile.counts.followers|human_number }} followers</span>
+            <span>{{ profile.counts.following|human_number }} following</span>
+          </div>
+
+          <div class="badge-row">
+            {% for badge in profile.quick_badges %}
+              <span class="metric-pill">{{ badge.label }} · {{ badge.count|human_number }}</span>
+            {% endfor %}
+          </div>
+
+          <p class="generated-at">Bundle updated {{ profile.generated_at|datetime }}</p>
+        </div>
+        <div class="profile-card-actions">
+          <a href="{{ profile.detail_url }}" class="button-secondary profile-open-link">Open Archive</a>
+        </div>
+      </article>
+    {% else %}
+      <article class="empty-panel">
+        {% if search_query %}
+          <h2>No profile matches found</h2>
+          <p>The dashboard searched usernames, display names, and bios. Matching archived items may still appear above.</p>
+        {% else %}
+          <h2>No archived profiles found</h2>
+          <p>The viewer only shows profiles that already have export bundles under <code>data/profiles/</code>.</p>
+        {% endif %}
+      </article>
+    {% endfor %}
+  </section>
+{% endblock %}

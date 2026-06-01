@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% from "_macros.html" import media_thumb %}
+
+{% block content %}
+  <section class="chat-shell">
+    <aside class="chat-sidebar">
+      <article class="panel chat-sidebar-panel">
+        <p class="back-link"><a class="inline-link" href="{{ back_to_account_url }}">Back to account archive</a></p>
+        <div class="profile-line">
+          <span class="platform-pill">{{ account.platform }}</span>
+          <span class="metric-pill">@{{ account.username }}</span>
+          {% if conversation.is_group %}
+            <span class="own-pill">group thread</span>
+          {% endif %}
+        </div>
+        <h2 class="chat-sidebar-title">Account threads</h2>
+        <p class="generated-at">{{ account.archive_counts.conversations|human_number }} conversations archived for this account.</p>
+
+        <div class="chat-conversation-list">
+          {% for item in conversation_sidebar %}
+            <a href="{{ item.detail_url }}" class="chat-conversation-link {% if item.conversation_id == conversation.conversation_id %}is-active{% endif %}">
+              <div class="chat-list-row">
+                <div class="chat-list-avatar avatar-wrap">
+                  {% if item.primary_profile and item.primary_profile.profile_pic_url %}
+                    <img src="{{ item.primary_profile.profile_pic_url }}" alt="{{ item.display_title }}" class="avatar">
+                  {% else %}
+                    <div class="avatar avatar-fallback">{{ item.display_title[:2]|upper }}</div>
+                  {% endif %}
+                </div>
+                <div class="chat-list-copy">
+                  <strong>{{ item.display_title }}</strong>
+                  <span>{{ item.last_message_preview or 'No preview saved yet.' }}</span>
+                </div>
+              </div>
+              <div class="chat-list-meta">
+                <span>{{ item.last_message_at|datetime }}</span>
+                <span>{{ item.message_count|human_number }} msgs</span>
+              </div>
+            </a>
+          {% endfor %}
+        </div>
+      </article>
+
+      {% if related_conversations %}
+        <article class="panel chat-sidebar-panel">
+          <span class="eyebrow">Linked Identity</span>
+          <h2 class="chat-sidebar-title">Other conversations with this profile</h2>
+          <div class="event-list">
+            {% for item in related_conversations %}
+              <a class="event-card" href="{{ item.detail_url }}">
+                <strong>{{ item.account_username }}</strong>
+                <span>{{ item.display_title }}</span>
+                <span>{{ item.last_message_at|datetime }}</span>
+              </a>
+            {% endfor %}
+          </div>
+        </article>
+      {% endif %}
+    </aside>
+
+    <section class="chat-panel">
+      <header class="chat-header">
+        <div class="chat-header-main">
+          <div class="chat-header-profile">
+            <div class="avatar-wrap avatar-wrap-large">
+              {% if conversation.primary_profile and conversation.primary_profile.profile_pic_url %}
+                <img src="{{ conversation.primary_profile.profile_pic_url }}" alt="{{ conversation.display_title }}" class="avatar avatar-large">
+              {% elif conversation.other_participants and conversation.other_participants[0].profile_pic_url %}
+                <img src="{{ conversation.other_participants[0].profile_pic_url }}" alt="{{ conversation.display_title }}" class="avatar avatar-large">
+              {% else %}
+                <div class="avatar avatar-large avatar-fallback">{{ conversation.display_title[:2]|upper }}</div>
+              {% endif %}
+            </div>
+            <div class="chat-header-copy">
+              <div class="profile-line">
+                <span class="platform-pill">{{ account.platform }}</span>
+                <span class="metric-pill">@{{ account.username }}</span>
+                <span class="metric-pill">{{ conversation.conversation_type }}</span>
+              </div>
+              <h1>{{ conversation.display_title }}</h1>
+              <p class="profile-bio profile-bio-large">
+                {% if conversation.primary_profile and conversation.primary_profile.bio_text %}
+                  {{ conversation.primary_profile.bio_text|instagram_links }}
+                {% else %}
+                  {{ conversation.last_message_preview or 'Saved message timeline for this conversation.' }}
+                {% endif %}
+              </p>
+              <div class="badge-row">
+                {% for participant in conversation.other_participants %}
+                  {% if participant.linked_profile.available %}
+                    <a class="metric-pill" href="{{ participant.linked_profile.detail_url }}">{{ participant.label }}</a>
+                  {% elif participant.profile_url %}
+                    <a class="metric-pill" href="{{ participant.profile_url }}" target="_blank" rel="noreferrer">{{ participant.label }}</a>
+                  {% else %}
+                    <span class="metric-pill">{{ participant.label }}</span>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+
+          <div class="chat-header-actions">
+            {% if conversation.primary_profile and conversation.primary_profile.available %}
+              <a class="button-secondary" href="{{ conversation.primary_profile.detail_url }}">Open Profile Archive</a>
+            {% endif %}
+            {% if conversation.primary_profile and conversation.primary_profile.username %}
+              <a class="button-secondary" href="{{ platform_profile_url(account.platform, conversation.primary_profile.username) }}" target="_blank" rel="noreferrer">Open Live Profile</a>
+            {% endif %}
+            <a class="button-secondary" href="{{ back_to_account_url }}">Open Account Threads</a>
+          </div>
+        </div>
+
+        <div class="chat-header-stats">
+          <span class="metric-pill">{{ conversation.message_count|human_number }} messages</span>
+          <span class="metric-pill">{{ conversation.attachment_count|human_number }} attachments</span>
+          <span class="metric-pill">{{ conversation.participant_count|human_number }} participants</span>
+          <span class="metric-pill">Latest {{ conversation.last_message_at|datetime }}</span>
+        </div>
+      </header>
+
+      {% if conversation_notice %}
+        <section class="panel notice-banner">{{ conversation_notice }}</section>
+      {% endif %}
+      {% if conversation_error %}
+        <section class="panel error-banner">{{ conversation_error }}</section>
+      {% endif %}
+
+      <section class="chat-thread" aria-label="Saved messages">
+        {% for message in conversation.messages %}
+          <article class="message-card {% if message.sender.is_self %}is-self{% else %}is-other{% endif %}">
+            <div class="message-topline">
+              <div class="message-sender">
+                <div class="message-avatar avatar-wrap">
+                  {% if message.sender.profile_pic_url %}
+                    <img src="{{ message.sender.profile_pic_url }}" alt="{{ message.sender.label }}" class="avatar">
+                  {% else %}
+                    <div class="avatar avatar-fallback">{{ message.sender.label[:2]|upper }}</div>
+                  {% endif %}
+                </div>
+                <div class="message-sender-copy">
+                  {% if message.sender.linked_profile and message.sender.linked_profile.available %}
+                    <a class="inline-link" href="{{ message.sender.linked_profile.detail_url }}"><strong>{{ message.sender.label }}</strong></a>
+                  {% elif message.sender.profile_url %}
+                    <a class="inline-link" href="{{ message.sender.profile_url }}" target="_blank" rel="noreferrer"><strong>{{ message.sender.label }}</strong></a>
+                  {% else %}
+                    <strong>{{ message.sender.label }}</strong>
+                  {% endif %}
+                  <span>{{ message.sent_at|datetime }}</span>
+                </div>
+              </div>
+              <div class="message-flags">
+                {% if message.message_type %}
+                  <span>{{ message.message_type }}</span>
+                {% endif %}
+                {% if message.sent_at_label %}
+                  <span>{{ message.sent_at_label }}</span>
+                {% endif %}
+              </div>
+            </div>
+
+            {% if message.text %}
+              <div class="message-body">{{ message.text|instagram_links }}</div>
+            {% endif %}
+
+            {% if message.attachments %}
+              <div class="detail-media-grid dm-attachments">
+                {% for asset in message.attachments %}
+                  <article class="detail-media-card">
+                    {{ media_thumb(asset, asset.preview_text or asset.filename) }}
+                    <div class="detail-media-meta">
+                      <strong>{{ asset.filename }}</strong>
+                      <span>{{ asset.media_type }}</span>
+                      <span>{{ asset.file_size|filesize }}</span>
+                      {% if asset.source_url %}
+                        <a class="inline-link" href="{{ asset.source_url }}" target="_blank" rel="noreferrer">Open source file</a>
+                      {% endif %}
+                    </div>
+                  </article>
+                {% endfor %}
+              </div>
+            {% endif %}
+
+            {% if message.status_text %}
+              <p class="generated-at">{{ message.status_text }}</p>
+            {% endif %}
+          </article>
+        {% else %}
+          <article class="empty-panel compact">
+            <h2>No saved messages</h2>
+            <p>The conversation exists in the archive index, but no message timeline has been written yet.</p>
+          </article>
+        {% endfor %}
+      </section>
+
+      <footer class="composer-panel">
+        {% if composer_enabled %}
+          <form method="post" action="{{ request.url_for('conversation_send', platform=account.platform, username=account.username, conversation_id=conversation.conversation_id) }}" class="composer-form">
+            <label>
+              <span class="eyebrow">Send message</span>
+              <textarea
+                name="message_text"
+                class="composer-textarea"
+                rows="4"
+                placeholder="Write an Instagram DM from @{{ account.username }}"
+              ></textarea>
+            </label>
+            <div class="composer-actions">
+              <button type="submit" class="button-primary">Send from Instagram</button>
+              <span class="generated-at">This uses the saved browser session for @{{ account.username }} and then refreshes the archive for this thread.</span>
+            </div>
+          </form>
+        {% else %}
+          <div class="composer-form is-disabled">
+            <span class="eyebrow">Send message</span>
+            <p>Live sending from the viewer is currently available for Instagram threads only.</p>
+          </div>
+        {% endif %}
+      </footer>
+    </section>
+  </section>
+{% endblock %}

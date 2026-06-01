@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import stat_tile %}
+
+{% block content %}
+  <section class="hero-panel">
+    <div class="hero-copy">
+      <span class="eyebrow">Messages</span>
+      <h1>Browse direct-message conversations across all owned accounts.</h1>
+      <p>Search by account, participant, conversation title, or saved message preview to jump into a thread quickly.</p>
+    </div>
+    <div class="hero-stats">
+      {{ stat_tile('Conversations', stats.conversations|human_number, 'accent-gold') }}
+      {{ stat_tile('Messages', stats.messages|human_number) }}
+      {{ stat_tile('Attachments', stats.attachments|human_number, 'accent-coral') }}
+    </div>
+  </section>
+
+  <section class="toolbar-panel">
+    <form class="toolbar-form" method="get">
+      <label>
+        <span>Platform</span>
+        <select name="platform">
+          <option value="">All platforms</option>
+          {% for value in platforms %}
+            <option value="{{ value }}" {% if selected_platform == value %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="toolbar-search">
+        <span>Search</span>
+        <input type="search" name="q" value="{{ search_query }}" placeholder="account, title, participant, preview">
+      </label>
+      <button type="submit" class="button-primary">Filter</button>
+      <a class="button-secondary" href="{{ request.url_for('messages_dashboard') }}">Clear</a>
+    </form>
+  </section>
+
+  <section class="conversation-grid">
+    {% for conversation in conversations %}
+      <article class="conversation-card js-card-link" data-href="{{ conversation.detail_url }}" tabindex="0" role="link" aria-label="Open conversation {{ conversation.display_title }}">
+        <div class="conversation-head">
+          <div class="profile-head">
+            <div class="avatar-wrap">
+              {% if conversation.primary_profile and conversation.primary_profile.profile_pic_url %}
+                <img src="{{ conversation.primary_profile.profile_pic_url }}" alt="{{ conversation.display_title }}" class="avatar">
+              {% else %}
+                <div class="avatar avatar-fallback">{{ conversation.display_title[:2]|upper }}</div>
+              {% endif %}
+            </div>
+            <div>
+            <div class="profile-line">
+              <span class="platform-pill">{{ conversation.platform }}</span>
+              <span class="metric-pill">@{{ conversation.account_username }}</span>
+            </div>
+            <h3>{{ conversation.display_title }}</h3>
+            </div>
+          </div>
+          <span class="metric-pill">{{ conversation.last_message_at|datetime }}</span>
+        </div>
+        <p class="generated-at">{{ conversation.last_message_preview or 'No preview saved yet.' }}</p>
+        <div class="badge-row">
+          {% for profile in conversation.participant_profiles[:5] %}
+            {% if profile.available %}
+              <a class="metric-pill" href="{{ profile.detail_url }}">{{ profile.display_name }}</a>
+            {% else %}
+              <span class="metric-pill">@{{ profile.username }}</span>
+            {% endif %}
+          {% endfor %}
+        </div>
+        <div class="mini-stats">
+          <span>{{ conversation.message_count|human_number }} messages</span>
+          <span>{{ conversation.attachment_count|human_number }} attachments</span>
+        </div>
+      </article>
+    {% else %}
+      <article class="empty-panel">
+        <h2>No conversations matched</h2>
+        <p>Try broadening the search or letting the DM archive run again first.</p>
+      </article>
+    {% endfor %}
+  </section>
+{% endblock %}

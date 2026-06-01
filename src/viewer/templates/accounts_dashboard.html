@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% from "_macros.html" import stat_tile %}
+
+{% block content %}
+  <section class="hero-panel">
+    <div class="hero-copy">
+      <span class="eyebrow">Owned Accounts</span>
+      <h1>Track what each logged-in account has archived so far.</h1>
+      <p>This section summarizes the account-level DM exports built under <code>data/accounts/</code>, including how many conversations, messages, and attachments were captured per account.</p>
+    </div>
+    <div class="hero-stats">
+      {{ stat_tile('Accounts', stats.accounts|human_number, 'accent-gold') }}
+      {{ stat_tile('Conversations', stats.conversations|human_number) }}
+      {{ stat_tile('Messages', stats.messages|human_number) }}
+      {{ stat_tile('Attachments', stats.attachments|human_number, 'accent-coral') }}
+    </div>
+  </section>
+
+  <section class="toolbar-panel">
+    <form class="toolbar-form" method="get">
+      <label>
+        <span>Platform</span>
+        <select name="platform">
+          <option value="">All platforms</option>
+          {% for value in platforms %}
+            <option value="{{ value }}" {% if selected_platform == value %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="toolbar-search">
+        <span>Search</span>
+        <input type="search" name="q" value="{{ search_query }}" placeholder="account, participant, conversation title">
+      </label>
+      <label>
+        <span>Sort accounts</span>
+        <select name="sort_accounts">
+          {% for value, label in account_sort_options %}
+            <option value="{{ value }}" {% if selected_account_sort == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Direction</span>
+        <select name="account_dir">
+          <option value="desc" {% if selected_account_dir == 'desc' %}selected{% endif %}>Descending</option>
+          <option value="asc" {% if selected_account_dir == 'asc' %}selected{% endif %}>Ascending</option>
+        </select>
+      </label>
+      <button type="submit" class="button-primary">Filter</button>
+      <a class="button-secondary" href="{{ request.url_for('accounts_dashboard') }}">Clear</a>
+    </form>
+  </section>
+
+  {% if recent_conversations %}
+    <section class="panel">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Latest Activity</span>
+          <h2>Recent conversations</h2>
+        </div>
+      </div>
+      <div class="conversation-grid">
+        {% for conversation in recent_conversations %}
+          <article class="conversation-card js-card-link" data-href="{{ conversation.detail_url }}" tabindex="0" role="link" aria-label="Open conversation {{ conversation.display_title }}">
+            <div class="conversation-head">
+              <div>
+                <div class="profile-line">
+                  <span class="platform-pill">{{ conversation.platform }}</span>
+                  <span class="metric-pill">@{{ conversation.account_username }}</span>
+                </div>
+                <h3>{{ conversation.display_title }}</h3>
+              </div>
+              <span class="metric-pill">{{ conversation.last_message_at|datetime }}</span>
+            </div>
+            <p class="generated-at">{{ conversation.last_message_preview or 'No preview saved yet.' }}</p>
+            <div class="badge-row">
+              {% for username in conversation.participant_usernames[:4] %}
+                <span class="metric-pill">@{{ username }}</span>
+              {% endfor %}
+            </div>
+            <div class="mini-stats">
+              <span>{{ conversation.message_count|human_number }} messages</span>
+              <span>{{ conversation.attachment_count|human_number }} attachments</span>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  <section class="profiles-grid">
+    {% for account in accounts %}
+      <article class="profile-card js-card-link" data-href="{{ account.detail_url }}" tabindex="0" role="link" aria-label="Open account archive for {{ account.username }}">
+        <div class="profile-card-link">
+          <div class="profile-head">
+            <div class="avatar-wrap">
+              {% if account.profile_pic_url %}
+                <img src="{{ account.profile_pic_url }}" alt="{{ account.username }}" class="avatar">
+              {% else %}
+                <div class="avatar avatar-fallback">{{ account.username[:2]|upper }}</div>
+              {% endif %}
+            </div>
+            <div class="profile-copy">
+              <div class="profile-line">
+                <span class="platform-pill">{{ account.platform }}</span>
+                <span class="own-pill">owned account</span>
+              </div>
+              <h2>{{ account.display_name }}</h2>
+              <p class="username"><a class="inline-link" href="{{ platform_profile_url(account.platform, account.username) }}" target="_blank" rel="noreferrer">@{{ account.username }}</a></p>
+              <p class="generated-at">Latest message {{ account.last_message_at|datetime }}</p>
+            </div>
+          </div>
+
+          {% if account.bio_text %}
+            <p class="profile-bio">{{ account.bio_text|instagram_links }}</p>
+          {% endif %}
+
+          <div class="mini-stats">
+            <span>{{ account.archive_counts.conversations|human_number }} conversations</span>
+            <span>{{ account.archive_counts.messages|human_number }} messages</span>
+          </div>
+          <div class="mini-stats">
+            <span>{{ account.archive_counts.attachments|human_number }} attachments</span>
+            <span>Bundle updated {{ account.generated_at|datetime }}</span>
+          </div>
+
+          {% if account.bio_follower_count or account.bio_following_count %}
+            <div class="mini-stats">
+              <span>{{ account.bio_follower_count|human_number }} followers</span>
+              <span>{{ account.bio_following_count|human_number }} following</span>
+            </div>
+          {% endif %}
+
+          {% if account.recent_participants %}
+            <div class="badge-row">
+              {% for username in account.recent_participants %}
+                <span class="metric-pill">@{{ username }}</span>
+              {% endfor %}
+            </div>
+          {% elif account.platform == 'instagram' %}
+            <p class="generated-at">No archived DMs yet. Run <code>python3 src/main.py --run-now dms --account instagram:{{ account.username }}</code>.</p>
+          {% else %}
+            <p class="generated-at">No archived DMs yet for this owned account.</p>
+          {% endif %}
+        </div>
+        <div class="profile-card-actions">
+          <a href="{{ account.detail_url }}" class="button-secondary profile-open-link">Open Account</a>
+          {% if account.linked_profile.available %}
+            <a href="{{ account.profile_detail_url }}" class="button-secondary profile-open-link">Open Profile</a>
+          {% endif %}
+        </div>
+      </article>
+    {% else %}
+      <article class="empty-panel">
+        <h2>No account archives found</h2>
+        <p>The viewer only shows owned accounts that already have exports under <code>data/accounts/</code>.</p>
+      </article>
+    {% endfor %}
+  </section>
+{% endblock %}

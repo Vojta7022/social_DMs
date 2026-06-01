@@ -1,0 +1,954 @@
+{% extends "base.html" %}
+{% from "_macros.html" import stat_tile, content_card, media_thumb, comment_branch, graph_map %}
+
+{% block content %}
+  {% set media_tabs = ['overview', 'posts', 'mentions', 'reposts', 'stories', 'highlights'] %}
+  <section class="profile-hero">
+    <div class="profile-hero-head">
+      <div class="avatar-wrap avatar-wrap-large">
+        {% if profile.bio.profile_pic_url %}
+          <img src="{{ profile.bio.profile_pic_url }}" alt="{{ profile.username }}" class="avatar avatar-large">
+        {% else %}
+          <div class="avatar avatar-large avatar-fallback">{{ profile.username[:2]|upper }}</div>
+        {% endif %}
+      </div>
+      <div class="profile-hero-copy">
+        <div class="profile-line">
+          <span class="platform-pill">{{ profile.platform }}</span>
+          {% if profile.is_own_account %}
+            <span class="own-pill">own account</span>
+          {% endif %}
+        </div>
+        <h1>{{ profile.display_name }}</h1>
+        <p class="username"><a class="inline-link" href="{{ instagram_profile_url(profile.username) }}" target="_blank" rel="noreferrer">@{{ profile.username }}</a></p>
+        {% if profile.bio.bio_text %}
+          <p class="profile-bio profile-bio-large">{{ profile.bio.bio_text|instagram_links }}</p>
+        {% endif %}
+        <div class="profile-subline">
+          <span>Last export {{ profile.generated_at|datetime }}</span>
+          {% if profile.bio.snapshot_at %}
+            <span>Bio snapshot {{ profile.bio.snapshot_at|datetime }}</span>
+          {% endif %}
+        </div>
+        {% if linked_account_url %}
+          <div class="action-row">
+            <a class="button-secondary" href="{{ linked_account_url }}">Open Account Archive</a>
+            <a class="button-secondary" href="{{ platform_profile_url(profile.platform, profile.username) }}" target="_blank" rel="noreferrer">Open Live Profile</a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="hero-stats hero-stats-profile">
+      {{ stat_tile('Archived Posts', profile.counts.posts|human_number, 'accent-gold') }}
+      {{ stat_tile('Mentions', profile.counts.mentions|human_number) }}
+      {{ stat_tile('Reposts', profile.counts.reposts|human_number) }}
+      {{ stat_tile('Stories', profile.counts.stories|human_number) }}
+      {{ stat_tile('Highlights', profile.counts.highlights|human_number, 'accent-coral') }}
+      {{ stat_tile('Followers', profile.counts.followers|human_number) }}
+      {{ stat_tile('Following', profile.counts.following|human_number) }}
+    </div>
+  </section>
+
+  <nav class="tab-strip">
+    {% for tab in tabs %}
+      <a
+        href="{{ tab.url }}"
+        class="tab-link {% if active_tab == tab.key %}is-active{% endif %}"
+      >
+        {{ tab.label }}
+      </a>
+    {% endfor %}
+  </nav>
+
+  {% if active_tab in media_tabs %}
+    <section class="toolbar-panel">
+      <form class="toolbar-form" method="get">
+        <input type="hidden" name="tab" value="{{ active_tab }}">
+        <label>
+          <span>Sort media</span>
+          <select name="sort">
+            {% for value, label in media_sort_options %}
+              <option value="{{ value }}" {% if selected_sort == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>Direction</span>
+          <select name="dir">
+            <option value="desc" {% if selected_dir == 'desc' %}selected{% endif %}>Descending</option>
+            <option value="asc" {% if selected_dir == 'asc' %}selected{% endif %}>Ascending</option>
+          </select>
+        </label>
+        <label>
+          <span>Filter media</span>
+          <select name="media_filter">
+            {% for value, label in media_filter_options %}
+              <option value="{{ value }}" {% if selected_media_filter == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="submit" class="button-primary">Apply</button>
+      </form>
+    </section>
+  {% endif %}
+
+  {% if active_tab == 'overview' %}
+    <section class="overview-grid">
+      <article class="panel">
+        <h2>Archive summary</h2>
+        <div class="summary-list">
+          <div><span>Feed posts</span><strong>{{ profile.counts.posts|human_number }}</strong></div>
+          <div><span>Profile post count</span><strong>{{ profile.bio.post_count|human_number }}</strong></div>
+          <div><span>Mention posts</span><strong>{{ profile.counts.mentions|human_number }}</strong></div>
+          <div><span>Reposts</span><strong>{{ profile.counts.reposts|human_number }}</strong></div>
+          <div><span>Stories</span><strong>{{ profile.counts.stories|human_number }}</strong></div>
+          <div><span>Highlights</span><strong>{{ profile.counts.highlights|human_number }}</strong></div>
+          <div><span>Saved media files</span><strong>{{ profile.media_summary.total_media_files|human_number }}</strong></div>
+          <div><span>Archive size</span><strong>{{ profile.media_summary.total_size_bytes|filesize }}</strong></div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Posting forecast</h2>
+        {% set forecast = profile.intelligence.next_post_prediction if profile.intelligence else {} %}
+        {% if forecast and forecast.status == 'ready' %}
+          <div class="summary-list">
+            <div><span>Predicted next post</span><strong>{{ forecast.get('predicted_at')|datetime }}</strong></div>
+            <div><span>Forecast window</span><strong>{{ forecast.get('window_start')|datetime }} to {{ forecast.get('window_end')|datetime }}</strong></div>
+            <div><span>Confidence</span><strong>{{ forecast.get('confidence', '—') }}</strong></div>
+            <div><span>Posts used</span><strong>{{ forecast.get('post_count_used')|human_number }}</strong></div>
+            <div><span>Last feed post</span><strong>{{ forecast.get('last_post_at')|datetime }}</strong></div>
+          </div>
+        {% else %}
+          <p>Not enough archived feed-post history yet to forecast the next likely posting window.</p>
+        {% endif %}
+      </article>
+
+      <article class="panel">
+        <h2>Sentiment overview</h2>
+        {% set sentiment = profile.intelligence.sentiment if profile.intelligence else {} %}
+        {% if sentiment and sentiment.status == 'ready' %}
+          <div class="summary-list">
+            <div><span>Average vibe</span><strong>{{ '%.2f'|format(sentiment.average_vibe_score) }}</strong></div>
+            <div><span>Posts scored</span><strong>{{ sentiment.posts_scored|human_number }}</strong></div>
+            <div><span>Positive posts</span><strong>{{ sentiment.positive_posts|human_number }}</strong></div>
+            <div><span>Neutral posts</span><strong>{{ sentiment.neutral_posts|human_number }}</strong></div>
+            <div><span>Negative posts</span><strong>{{ sentiment.negative_posts|human_number }}</strong></div>
+          </div>
+        {% elif sentiment and sentiment.status == 'dependency_missing' %}
+          <p>Sentiment analysis is configured in the archive format, but `vaderSentiment` is not installed in this environment yet.</p>
+        {% else %}
+          <p>No caption/comment text was available yet to produce a profile-level vibe summary.</p>
+        {% endif %}
+      </article>
+
+      <article class="panel">
+        <h2>Location signals</h2>
+        {% set locations = profile.intelligence.geoparsed_locations if profile.intelligence else {} %}
+        {% if locations and locations.status == 'ready' %}
+          <div class="event-list">
+            {% for location in locations.top_locations %}
+              <div class="event-card">
+                <strong>{{ location.name }}</strong>
+                <span>{{ location.occurrences|human_number }} signal{% if location.occurrences != 1 %}s{% endif %} · confidence {{ location.max_confidence }}</span>
+                {% if location.source_types %}<span>{{ location.source_types|join(', ') }}</span>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p>No strong location candidates were extracted yet from captions, bio text, or structured story location tags.</p>
+        {% endif %}
+      </article>
+
+      <article class="panel" id="cross-platform-panel">
+        <h2>Cross-platform links</h2>
+
+        {# ── Confirmed (approved) links ── #}
+        {% set approved = profile.approved_links if profile.approved_links else [] %}
+        <div id="confirmed-links-section">
+          {% if approved %}
+            <p class="panel-footnote" style="margin-top:0;margin-bottom:10px;font-size:0.82rem;opacity:0.7;">Confirmed accounts</p>
+            <div class="event-list" id="confirmed-links-list">
+              {% for link in approved %}
+                <div class="event-card" id="confirmed-{{ link.target_platform }}-{{ link.target_username }}" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                  <div style="display:flex;flex-direction:column;gap:4px;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <span class="platform-pill">{{ link.target_platform }}</span>
+                      <a class="inline-link" href="{{ platform_profile_url(link.target_platform, link.target_username) }}" target="_blank" rel="noreferrer">@{{ link.target_username }}</a>
+                    </div>
+                    {% if link.reasons %}
+                      <div style="font-size:0.78rem;opacity:0.65;">{{ link.reasons|join(' · ') }}</div>
+                    {% endif %}
+                    {% if link.face_score is not none %}
+                      <div style="font-size:0.78rem;opacity:0.65;">face match {{ '%.0f'|format(link.face_score * 100) }}%</div>
+                    {% endif %}
+                  </div>
+                  <button class="button-secondary xpl-remove-btn" style="padding:6px 12px;font-size:0.78rem;flex-shrink:0;"
+                    data-source-platform="{{ profile.platform }}"
+                    data-source-username="{{ profile.username }}"
+                    data-target-platform="{{ link.target_platform }}"
+                    data-target-username="{{ link.target_username }}">Remove</button>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div id="confirmed-links-list"></div>
+          {% endif %}
+        </div>
+
+        {# ── AI Suggestions (pending, not yet acted on) ── #}
+        {% set links = profile.intelligence.linked_profiles if profile.intelligence else {} %}
+        {% set suggestions = links.matches if links and links.matches else [] %}
+        {% if suggestions %}
+          <p class="panel-footnote" style="margin-top:14px;margin-bottom:10px;font-size:0.82rem;opacity:0.7;">Suggested matches — approve to confirm</p>
+          <div class="event-list" id="suggestions-list">
+            {% for match in suggestions %}
+              <div class="event-card xpl-suggestion" id="suggestion-{{ match.platform }}-{{ match.username }}" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="platform-pill">{{ match.platform }}</span>
+                    <a class="inline-link" href="{{ platform_profile_url(match.platform, match.username) }}" target="_blank" rel="noreferrer">@{{ match.username }}</a>
+                    <span style="font-size:0.78rem;opacity:0.65;">{{ match.confidence_label }} ({{ match.confidence }})</span>
+                  </div>
+                  {% if match.reasons %}
+                    <div style="font-size:0.78rem;opacity:0.65;">{{ match.reasons|join(' · ') }}</div>
+                  {% endif %}
+                  {% if match.evidence and match.evidence.face_score is defined %}
+                    <div style="font-size:0.78rem;opacity:0.65;">face match {{ '%.0f'|format(match.evidence.face_score * 100) }}%</div>
+                  {% endif %}
+                </div>
+                <div style="display:flex;gap:8px;flex-shrink:0;">
+                  <button class="button-primary xpl-approve-btn" style="padding:6px 14px;font-size:0.78rem;"
+                    data-source-platform="{{ profile.platform }}"
+                    data-source-username="{{ profile.username }}"
+                    data-target-platform="{{ match.platform }}"
+                    data-target-username="{{ match.username }}"
+                    data-confidence="{{ match.confidence }}"
+                    data-reasons="{{ match.reasons|tojson if match.reasons else '[]' }}"
+                    data-evidence="{{ match.evidence|tojson if match.evidence else '{}' }}">Approve</button>
+                  <button class="button-secondary xpl-reject-btn" style="padding:6px 12px;font-size:0.78rem;"
+                    data-source-platform="{{ profile.platform }}"
+                    data-source-username="{{ profile.username }}"
+                    data-target-platform="{{ match.platform }}"
+                    data-target-username="{{ match.username }}">Reject</button>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% elif not approved %}
+          <p>No cross-platform profile matches were found yet from usernames or bio links.</p>
+        {% endif %}
+
+        {# ── Live search across platforms ── #}
+        <div style="margin-top:16px;">
+          <button class="button-secondary" id="xpl-search-btn" style="font-size:0.82rem;padding:8px 16px;"
+            data-source-platform="{{ profile.platform }}"
+            data-source-username="{{ profile.username }}"
+            data-display-name="{{ profile.display_name }}">
+            Search all platforms for this person
+          </button>
+          <span id="xpl-search-status" style="font-size:0.78rem;opacity:0.6;margin-left:10px;display:none;">Searching…</span>
+        </div>
+        <div class="event-list" id="live-search-results" style="margin-top:12px;"></div>
+
+        <script>
+        (function () {
+          const panel = document.getElementById('cross-platform-panel');
+
+          function apiUrl(sourcePlatform, sourceUsername, action) {
+            return `/api/profiles/${sourcePlatform}/${sourceUsername}/cross-platform-links/${action}`;
+          }
+
+          function buildConfirmedCard(sp, su, tp, tu, reasons, faceScore) {
+            const card = document.createElement('div');
+            card.className = 'event-card';
+            card.id = `confirmed-${tp}-${tu}`;
+            card.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:12px;';
+            const reasonsHtml = reasons && reasons.length
+              ? `<div style="font-size:0.78rem;opacity:0.65;">${reasons.join(' · ')}</div>` : '';
+            const faceHtml = faceScore != null
+              ? `<div style="font-size:0.78rem;opacity:0.65;">face match ${Math.round(faceScore * 100)}%</div>` : '';
+            const profileUrl = `/profiles/${tp}/${tu}`;
+            card.innerHTML = `
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span class="platform-pill">${tp}</span>
+                  <a class="inline-link" href="${profileUrl}" target="_blank" rel="noreferrer">@${tu}</a>
+                </div>
+                ${reasonsHtml}${faceHtml}
+              </div>
+              <button class="button-secondary xpl-remove-btn" style="padding:6px 12px;font-size:0.78rem;flex-shrink:0;"
+                data-source-platform="${sp}" data-source-username="${su}"
+                data-target-platform="${tp}" data-target-username="${tu}">Remove</button>`;
+            return card;
+          }
+
+          panel.addEventListener('click', async function (e) {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+
+            const sp = btn.dataset.sourcePlatform;
+            const su = btn.dataset.sourceUsername;
+            const tp = btn.dataset.targetPlatform;
+            const tu = btn.dataset.targetUsername;
+            if (!sp || !su || !tp || !tu) return;
+
+            if (btn.classList.contains('xpl-approve-btn')) {
+              btn.disabled = true;
+              btn.textContent = '…';
+              try {
+                const reasons = JSON.parse(btn.dataset.reasons || '[]');
+                const evidence = JSON.parse(btn.dataset.evidence || '{}');
+                const confidence = parseFloat(btn.dataset.confidence) || null;
+                const res = await fetch(apiUrl(sp, su, 'approve'), {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({target_platform: tp, target_username: tu, confidence, reasons, evidence}),
+                });
+                if (!res.ok) throw new Error(await res.text());
+                // Move card to confirmed section
+                const suggCard = document.getElementById(`suggestion-${tp}-${tu}`);
+                if (suggCard) suggCard.remove();
+                const faceScore = evidence.face_score ?? null;
+                const confirmedList = document.getElementById('confirmed-links-list');
+                confirmedList.appendChild(buildConfirmedCard(sp, su, tp, tu, reasons, faceScore));
+              } catch (err) {
+                btn.disabled = false;
+                btn.textContent = 'Approve';
+                alert('Approve failed: ' + err.message);
+              }
+
+            } else if (btn.classList.contains('xpl-reject-btn')) {
+              btn.disabled = true;
+              try {
+                const res = await fetch(apiUrl(sp, su, 'reject'), {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({target_platform: tp, target_username: tu}),
+                });
+                if (!res.ok) throw new Error(await res.text());
+                const suggCard = document.getElementById(`suggestion-${tp}-${tu}`);
+                if (suggCard) {
+                  suggCard.style.opacity = '0.35';
+                  suggCard.style.pointerEvents = 'none';
+                  setTimeout(() => suggCard.remove(), 400);
+                }
+              } catch (err) {
+                btn.disabled = false;
+                alert('Reject failed: ' + err.message);
+              }
+
+            } else if (btn.classList.contains('xpl-remove-btn')) {
+              if (!confirm(`Remove confirmed link to @${tu} on ${tp}?`)) return;
+              btn.disabled = true;
+              try {
+                const res = await fetch(apiUrl(sp, su, 'reject'), {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({target_platform: tp, target_username: tu}),
+                });
+                if (!res.ok) throw new Error(await res.text());
+                const confirmedCard = document.getElementById(`confirmed-${tp}-${tu}`);
+                if (confirmedCard) confirmedCard.remove();
+              } catch (err) {
+                btn.disabled = false;
+                alert('Remove failed: ' + err.message);
+              }
+            }
+          });
+
+          // ── Live search button ────────────────────────────────────────────
+          const searchBtn = document.getElementById('xpl-search-btn');
+          const searchStatus = document.getElementById('xpl-search-status');
+          const liveResults = document.getElementById('live-search-results');
+
+          function buildSearchResultCard(r, sp, su) {
+            const card = document.createElement('div');
+            card.className = 'event-card xpl-suggestion';
+            card.id = `suggestion-${r.platform}-${r.username}`;
+            card.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:12px;';
+            const picHtml = r.profile_pic_url
+              ? `<img src="${r.profile_pic_url}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;" loading="lazy">`
+              : '';
+            card.innerHTML = `
+              <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+                ${picHtml}
+                <div style="display:flex;flex-direction:column;gap:3px;min-width:0;">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <span class="platform-pill">${r.platform}</span>
+                    <a class="inline-link" href="${r.profile_url}" target="_blank" rel="noreferrer">@${r.username}</a>
+                    ${r.display_name && r.display_name !== r.username ? `<span style="font-size:0.82rem;opacity:0.75;">${r.display_name}</span>` : ''}
+                  </div>
+                  ${r.follower_count != null ? `<div style="font-size:0.78rem;opacity:0.55;">${r.follower_count.toLocaleString()} followers</div>` : ''}
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;flex-shrink:0;">
+                <button class="button-primary xpl-approve-btn" style="padding:6px 14px;font-size:0.78rem;"
+                  data-source-platform="${sp}" data-source-username="${su}"
+                  data-target-platform="${r.platform}" data-target-username="${r.username}"
+                  data-confidence="0.5" data-reasons='["live_search"]' data-evidence="{}">Approve</button>
+                <button class="button-secondary xpl-reject-btn" style="padding:6px 12px;font-size:0.78rem;"
+                  data-source-platform="${sp}" data-source-username="${su}"
+                  data-target-platform="${r.platform}" data-target-username="${r.username}">Dismiss</button>
+              </div>`;
+            return card;
+          }
+
+          if (searchBtn) {
+            searchBtn.addEventListener('click', async function () {
+              const sp = searchBtn.dataset.sourcePlatform;
+              const su = searchBtn.dataset.sourceUsername;
+              const displayName = searchBtn.dataset.displayName;
+              if (!displayName) { alert('No display name available for search.'); return; }
+
+              searchBtn.disabled = true;
+              searchStatus.style.display = 'inline';
+              liveResults.innerHTML = '';
+
+              try {
+                const res = await fetch(`/api/profiles/${sp}/${su}/cross-platform-search`, {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({display_name: displayName}),
+                });
+                if (!res.ok) throw new Error(await res.text());
+                const data = await res.json();
+                const results = data.results || [];
+                if (results.length === 0) {
+                  liveResults.innerHTML = '<p style="font-size:0.82rem;opacity:0.6;padding:8px 0;">No accounts found on other platforms.</p>';
+                } else {
+                  results.forEach(r => liveResults.appendChild(buildSearchResultCard(r, sp, su)));
+                }
+              } catch (err) {
+                liveResults.innerHTML = `<p style="font-size:0.82rem;color:#c0392b;padding:8px 0;">Search failed: ${err.message}</p>`;
+              } finally {
+                searchBtn.disabled = false;
+                searchStatus.style.display = 'none';
+              }
+            });
+          }
+        })();
+        </script>
+      </article>
+
+      <article class="panel">
+        <h2>Repost analytics</h2>
+        {% set reposts = profile.intelligence.repost_analytics if profile.intelligence else {} %}
+        {% if reposts and reposts.status == 'ready' %}
+          <div class="summary-list">
+            <div><span>Total reposts</span><strong>{{ reposts.total_reposts|human_number }}</strong></div>
+            <div><span>Average vibe</span><strong>{% if reposts.average_vibe_score is not none %}{{ '%.2f'|format(reposts.average_vibe_score) }}{% else %}—{% endif %}</strong></div>
+            <div><span>Active window</span><strong>{{ reposts.active_window }}</strong></div>
+            <div><span>Deviation flags</span><strong>{{ reposts.deviation_flags|human_number }}</strong></div>
+          </div>
+          {% if reposts.top_categories %}
+            <div class="event-list">
+              {% for category in reposts.top_categories %}
+                <div class="event-card">
+                  <strong>{{ category.category }}</strong>
+                  <span>{{ category.count|human_number }} reposts · share {{ category.share }}</span>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% else %}
+          <p>No repost analytics are available for this profile yet.</p>
+        {% endif %}
+      </article>
+
+      <article class="panel">
+        <h2>Connection snapshots</h2>
+        <div class="summary-list">
+          <div><span>Followers</span><strong>{{ profile.connections.followers.count|human_number }}</strong></div>
+          <div><span>Follower snapshot</span><strong>{{ profile.connections.followers.snapshot_at|datetime }}</strong></div>
+          <div><span>Following</span><strong>{{ profile.connections.following.count|human_number }}</strong></div>
+          <div><span>Following snapshot</span><strong>{{ profile.connections.following.snapshot_at|datetime }}</strong></div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Direct messages</h2>
+        {% if related_conversations %}
+          <div class="event-list">
+            {% for conversation in related_conversations %}
+              <a class="event-card" href="{{ conversation.detail_url }}">
+                <strong>@{{ conversation.account_username }}</strong>
+                <span>{{ conversation.display_title }}</span>
+                <span>{{ conversation.last_message_preview or 'No preview saved yet.' }}</span>
+                <span>{{ conversation.last_message_at|datetime }}</span>
+              </a>
+            {% endfor %}
+          </div>
+        {% elif profile.is_own_account and linked_account_url %}
+          <p>This owned profile is linked to an account archive, but there are no DM conversations exported yet.</p>
+        {% else %}
+          <p>No archived DM conversations have been linked to this profile yet.</p>
+        {% endif %}
+      </article>
+
+      <article class="panel">
+        <h2>Social graph export</h2>
+        {% set graph = profile.graph if profile.graph else {} %}
+        {% if graph and graph.available %}
+          {{ graph_map(graph) }}
+          <div class="summary-list">
+            <div><span>Nodes</span><strong>{{ graph.node_count|human_number }}</strong></div>
+            <div><span>Links</span><strong>{{ graph.link_count|human_number }}</strong></div>
+            <div><span>Follower nodes</span><strong>{{ graph.follower_node_count|human_number }}</strong></div>
+            <div><span>Following nodes</span><strong>{{ graph.following_node_count|human_number }}</strong></div>
+            <div><span>Graph generated</span><strong>{{ graph.generated_at|datetime }}</strong></div>
+            <div><span>Format</span><strong>{{ graph.format or '—' }}</strong></div>
+          </div>
+          <p class="panel-footnote">
+            <a class="inline-link" href="{{ request.url_for('api_profile_graph', platform=profile.platform, username=profile.username) }}" target="_blank" rel="noreferrer">Open raw graph JSON</a>
+          </p>
+        {% else %}
+          <p>No social graph export is available for this profile yet.</p>
+        {% endif %}
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>Recent archive activity</h2>
+        <p>The latest saved items across posts, mentions, reposts, stories, and highlights.</p>
+      </div>
+      <div class="content-grid">
+        {% for item in profile.overview_items %}
+          {{ content_card(item, item_query_string, profile.platform, false) }}
+        {% else %}
+          <div class="empty-panel compact">
+            <p>No archived items yet for this profile.</p>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  {% elif active_tab in ['posts', 'mentions', 'reposts', 'stories', 'highlights'] %}
+    <section class="panel">
+      <div class="section-head">
+        <h2>{{ active_tab|title }}</h2>
+        <p>
+          {% if active_tab == 'posts' %}Feed posts archived from the target profile.{% endif %}
+          {% if active_tab == 'mentions' %}Tagged or mention posts where this profile appears.{% endif %}
+          {% if active_tab == 'reposts' %}Archived repost content.{% endif %}
+          {% if active_tab == 'stories' %}Current and captured story items.{% endif %}
+          {% if active_tab == 'highlights' %}Archived story highlight items grouped by collection name.{% endif %}
+        </p>
+      </div>
+      <div class="content-grid">
+        {% for item in profile.collections[active_tab] %}
+          {{ content_card(item, item_query_string, profile.platform, active_tab in ['posts', 'mentions', 'reposts']) }}
+        {% else %}
+          <div class="empty-panel compact">
+            <p>No {{ active_tab }} archived for this profile yet.</p>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  {% elif active_tab == 'deep_profile' %}
+    {% set deep = profile.deep_profile if profile.deep_profile else {} %}
+    {% set deep_items = deep.get('items', []) if deep else [] %}
+    <section class="overview-grid">
+      <article class="panel">
+        <h2>Deep Profile</h2>
+        {% if deep and deep.available %}
+          <div class="summary-list">
+            <div><span>Generated</span><strong>{{ deep.generated_at|datetime }}</strong></div>
+            <div><span>Model</span><strong>{{ deep.model or '—' }}</strong></div>
+            <div><span>Analyzed entries</span><strong>{{ deep.summary.analyzed_entries|human_number }}</strong></div>
+            <div><span>Scanned media files</span><strong>{{ deep.summary.scanned_media_files|human_number }}</strong></div>
+            <div><span>Selected media files</span><strong>{{ deep.summary.selected_source_media_files|human_number }}</strong></div>
+            <div><span>Source videos</span><strong>{{ deep.summary.source_videos|human_number }}</strong></div>
+            <div><span>Video frames</span><strong>{{ deep.summary.video_frames_analyzed|human_number }}</strong></div>
+            <div><span>Music-tagged</span><strong>{{ deep.summary.music_attached_items|human_number }}</strong></div>
+            <div><span>Travel-related</span><strong>{{ deep.summary.travel_related_items|human_number }}</strong></div>
+          </div>
+          {% if deep.is_partial_run %}
+            <p class="content-subtle">This artifact is from a partial run: {{ deep.summary.analyzed_entries|human_number }} of {{ deep.prepared_entry_count|human_number }} prepared entries were analyzed.</p>
+          {% endif %}
+          {% if deep.summary.overview %}
+            <p>{{ deep.summary.overview }}</p>
+          {% endif %}
+          <p class="panel-footnote">
+            <a class="inline-link" href="{{ request.url_for('api_profile_deep_profile', platform=profile.platform, username=profile.username) }}" target="_blank" rel="noreferrer">Open raw deep-profile JSON</a>
+          </p>
+          {% if deep.report_relative_path %}
+            <p class="panel-footnote">Markdown report path: <code>{{ deep.report_relative_path }}</code></p>
+          {% endif %}
+          {% if deep.graph_relative_path %}
+            <p class="panel-footnote">Entity graph path: <code>{{ deep.graph_relative_path }}</code></p>
+          {% endif %}
+        {% else %}
+          <p>No deep-profile analysis is available for this profile yet.</p>
+        {% endif %}
+      </article>
+
+      <article class="panel">
+        <h2>Safety Scope</h2>
+        {% if deep and deep.safety %}
+          <p>{{ deep.safety.scope }}</p>
+          <div class="event-list">
+            {% for item in deep.safety.excluded_inferences %}
+              <div class="event-card">
+                <strong>Excluded</strong>
+                <span>{{ item }}</span>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p>This analysis is intended for visible-content review only.</p>
+        {% endif %}
+      </article>
+
+      <article class="panel">
+        <h2>Top Activities</h2>
+        <div class="event-list">
+          {% for item in deep.summary.top_activities %}
+            <div class="event-card">
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.count|human_number }} hits</span>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No activity tags were extracted yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Top Hobbies</h2>
+        <div class="event-list">
+          {% for item in deep.summary.top_hobbies %}
+            <div class="event-card">
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.count|human_number }} hits</span>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No hobby signals were extracted yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Music Artists</h2>
+        <div class="event-list">
+          {% for item in deep.summary.top_music_artists %}
+            <div class="event-card">
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.count|human_number }} uses</span>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No attached music artists were extracted yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Location Guesses</h2>
+        <div class="event-list">
+          {% for item in deep.summary.top_location_guesses %}
+            <div class="event-card">
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.count|human_number }} hits</span>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No best-effort location guesses were extracted yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Explicit Accounts</h2>
+        <div class="event-list">
+          {% for item in deep.summary.top_explicit_accounts %}
+            <div class="event-card">
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.count|human_number }} mentions</span>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No explicit account mentions were extracted yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Visible Brands Or Logos</h2>
+        <div class="event-list">
+          {% for item in deep.summary.top_brands_or_logos %}
+            <div class="event-card">
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.count|human_number }} hits</span>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No clear visible brands or logos were extracted.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Style Signals</h2>
+        <div class="event-list">
+          {% for item in deep.summary.top_style_signals %}
+            <div class="event-card">
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.count|human_number }} hits</span>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No style signals were extracted yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Explicit Location Signals</h2>
+        <div class="event-list">
+          {% for item in deep.summary.top_location_signals %}
+            <div class="event-card">
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.count|human_number }} hits</span>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No explicit location signals were extracted yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Recurring Themes</h2>
+        <div class="event-list">
+          {% for item in deep.summary.top_recurring_themes %}
+            <div class="event-card">
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.count|human_number }} hits</span>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No recurring themes were extracted yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Social Context Visible</h2>
+        <div class="event-list">
+          {% for item in deep.summary.social_context_breakdown %}
+            <div class="event-card">
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.count|human_number }} hits</span>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No social-context labels were extracted yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Source Breakdown</h2>
+        <div class="event-list">
+          {% for item in deep.summary.source_breakdown %}
+            <div class="event-card">
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.count|human_number }} entries</span>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No source breakdown is available yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>Representative Evidence</h2>
+        <p>Recent analyzed media entries from the generated deep-profile artifact.</p>
+      </div>
+      <div class="content-grid">
+        {% for item in deep_items[:18] %}
+          <article class="content-card">
+            {{ media_thumb(item.preview_asset, item.analysis.visual_summary or item.source_item_id, true) }}
+            <div class="content-copy">
+              <div class="content-meta">
+                <span class="content-kind">{{ item.source_kind_label }}</span>
+                {% if item.analysis_media_type == 'video_frame' %}
+                  <span class="content-collection">frame {{ item.frame_index }} @ {{ item.frame_offset_s }}s</span>
+                {% endif %}
+              </div>
+              <h3>{{ item.analysis.visual_summary or item.source_item_id or item.source_relative_path }}</h3>
+              <p class="content-subtle">
+                {% if item.posted_at %}{{ item.posted_at|datetime }}{% elif item.analyzed_at %}{{ item.analyzed_at|datetime }}{% else %}No timestamp{% endif %}
+              </p>
+              <div class="content-stats">
+                {% if item.analysis.activities %}<span>{{ item.analysis.activities|join(', ') }}</span>{% endif %}
+                {% if item.analysis.recurring_themes %}<span>{{ item.analysis.recurring_themes|join(', ') }}</span>{% endif %}
+                {% if item.analysis.explicit_location_signals %}<span>{{ item.analysis.explicit_location_signals|join(', ') }}</span>{% endif %}
+              </div>
+              {% if item.caption %}
+                <p>{{ item.caption|instagram_links }}</p>
+              {% endif %}
+              {% if item.analysis.social_context_visible.category %}
+                <p class="content-subtle">Social context: {{ item.analysis.social_context_visible.category }}</p>
+              {% endif %}
+              {% if item.analysis.confidence_notes %}
+                <p class="content-subtle">{{ item.analysis.confidence_notes }}</p>
+              {% endif %}
+            </div>
+          </article>
+        {% else %}
+          <div class="empty-panel compact">
+            <p>No deep-profile evidence cards are available yet.</p>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  {% elif active_tab == 'connections' %}
+    <section class="connections-grid">
+      <article class="panel">
+        <div class="section-head">
+          <h2>Followers</h2>
+          <p>{{ profile.connections.followers.count|human_number }} captured on {{ profile.connections.followers.snapshot_at|datetime }}</p>
+        </div>
+        <div class="connection-list">
+          {% for user in profile.connections.followers.users %}
+            <div class="connection-card">
+              <div class="connection-copy">
+                <strong><a class="inline-link" href="{{ instagram_profile_url(user.username) }}" target="_blank" rel="noreferrer">@{{ user.username }}</a></strong>
+                {% if user.display_name %}
+                  <span>{{ user.display_name }}</span>
+                {% endif %}
+              </div>
+              <div class="badge-row">
+                {% if user.is_verified %}<span class="metric-pill">verified</span>{% endif %}
+                {% if user.is_private %}<span class="metric-pill">private</span>{% endif %}
+              </div>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No follower snapshot data yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="section-head">
+          <h2>Following</h2>
+          <p>{{ profile.connections.following.count|human_number }} captured on {{ profile.connections.following.snapshot_at|datetime }}</p>
+        </div>
+        <div class="connection-list">
+          {% for user in profile.connections.following.users %}
+            <div class="connection-card">
+              <div class="connection-copy">
+                <strong><a class="inline-link" href="{{ instagram_profile_url(user.username) }}" target="_blank" rel="noreferrer">@{{ user.username }}</a></strong>
+                {% if user.display_name %}
+                  <span>{{ user.display_name }}</span>
+                {% endif %}
+              </div>
+              <div class="badge-row">
+                {% if user.is_verified %}<span class="metric-pill">verified</span>{% endif %}
+                {% if user.is_private %}<span class="metric-pill">private</span>{% endif %}
+              </div>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No following snapshot data yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+    </section>
+
+    <section class="overview-grid">
+      <article class="panel">
+        <h2>Follower change log</h2>
+        <div class="event-list">
+          {% for event in profile.connections.follower_delta_log %}
+            <div class="event-card">
+              <strong>{{ event.event_type }}</strong>
+              <span>@{{ event.target_username }}</span>
+              <time>{{ event.detected_at|datetime }}</time>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No follower change events recorded yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Following change log</h2>
+        <div class="event-list">
+          {% for event in profile.connections.following_delta_log %}
+            <div class="event-card">
+              <strong>{{ event.event_type }}</strong>
+              <span>@{{ event.target_username }}</span>
+              <time>{{ event.detected_at|datetime }}</time>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No following change events recorded yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+    </section>
+
+    <section class="overview-grid">
+      <article class="panel">
+        <h2>Social graph export</h2>
+        {% set graph = profile.graph if profile.graph else {} %}
+        {% if graph and graph.available %}
+          {{ graph_map(graph) }}
+          <div class="summary-list">
+            <div><span>Nodes</span><strong>{{ graph.node_count|human_number }}</strong></div>
+            <div><span>Links</span><strong>{{ graph.link_count|human_number }}</strong></div>
+            <div><span>Followers snapshot</span><strong>{{ graph.followers_snapshot_at|datetime }}</strong></div>
+            <div><span>Following snapshot</span><strong>{{ graph.following_snapshot_at|datetime }}</strong></div>
+          </div>
+          <p class="panel-footnote">
+            <a class="inline-link" href="{{ request.url_for('api_profile_graph', platform=profile.platform, username=profile.username) }}" target="_blank" rel="noreferrer">Open raw graph JSON</a>
+          </p>
+        {% else %}
+          <p>No social graph export is available for this profile yet.</p>
+        {% endif %}
+      </article>
+    </section>
+
+    <section class="overview-grid">
+      <article class="panel">
+        <h2>All-Time Followers</h2>
+        <div class="connection-list history-list">
+          {% for user in profile.connections.followers_history.users %}
+            <div class="connection-card history-card">
+              <div class="connection-copy">
+                <strong><a class="inline-link" href="{{ instagram_profile_url(user.username) }}" target="_blank" rel="noreferrer">@{{ user.username }}</a></strong>
+                {% if user.display_name %}<span>{{ user.display_name }}</span>{% endif %}
+                <span>first seen {{ user.first_seen_at|datetime }}</span>
+                <span>last seen {{ user.last_seen_at|datetime }}</span>
+              </div>
+              <div class="badge-row">
+                <span class="metric-pill">{{ user.times_seen|human_number }} snapshots</span>
+                <span class="metric-pill">{% if user.currently_present %}current{% else %}historical only{% endif %}</span>
+              </div>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No all-time follower history yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>All-Time Following</h2>
+        <div class="connection-list history-list">
+          {% for user in profile.connections.following_history.users %}
+            <div class="connection-card history-card">
+              <div class="connection-copy">
+                <strong><a class="inline-link" href="{{ instagram_profile_url(user.username) }}" target="_blank" rel="noreferrer">@{{ user.username }}</a></strong>
+                {% if user.display_name %}<span>{{ user.display_name }}</span>{% endif %}
+                <span>first seen {{ user.first_seen_at|datetime }}</span>
+                <span>last seen {{ user.last_seen_at|datetime }}</span>
+              </div>
+              <div class="badge-row">
+                <span class="metric-pill">{{ user.times_seen|human_number }} snapshots</span>
+                <span class="metric-pill">{% if user.currently_present %}current{% else %}historical only{% endif %}</span>
+              </div>
+            </div>
+          {% else %}
+            <div class="empty-panel compact"><p>No all-time following history yet.</p></div>
+          {% endfor %}
+        </div>
+      </article>
+    </section>
+  {% endif %}
+{% endblock %}

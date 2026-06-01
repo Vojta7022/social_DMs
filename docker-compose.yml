@@ -1,0 +1,51 @@
+services:
+  social-scanner:
+    build:
+      context: .
+      # To build for multiple architectures:
+      #   docker buildx build --platform linux/amd64,linux/arm64 -t social-scanner:latest --push .
+    image: social-scanner:latest
+    restart: unless-stopped
+
+    # Secrets injected at runtime — never baked into the image
+    env_file:
+      - path: .env.local
+        required: false
+      - path: .env
+        required: false
+
+    volumes:
+      # Persistent data: SQLite DB, sessions, media files, profiles
+      - ./data:/app/data
+      # ChromaDB vector store (Phase 4)
+      - ./data/chroma:/app/data/chroma
+      # Config is read-only inside the container
+      - ./settings.yaml:/app/settings.yaml:ro
+
+    environment:
+      - DISPLAY=             # no display needed (headless Chromium)
+      - PYTHONUNBUFFERED=1
+      # Phase 3 — Gemini AI analysis (optional, leave blank to disable)
+      - GEMINI_API_KEY=
+      - META_GRAPH_ACCESS_TOKEN=
+      - META_GRAPH_IG_USER_ID=
+      - META_GRAPH_API_VERSION=v22.0
+      - META_GRAPH_BASE_URL=https://graph.instagram.com
+      - META_GRAPH_APP_SECRET=
+      # Phase 1 — command listener security (comma-separated Telegram user IDs)
+      - TELEGRAM_ALLOWED_USER_IDS=
+      - TELEGRAM_DIGITAL_TWIN_THREAD_ID=
+
+    # Use public DNS to avoid Docker's embedded resolver dropping under load
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+
+    # Resource limits for Raspberry Pi 4 (8 GB RAM).
+    # 2200M provides headroom for ChromaDB + sentence-transformers (~800 MB).
+    deploy:
+      resources:
+        limits:
+          memory: 2200M
+        reservations:
+          memory: 384M

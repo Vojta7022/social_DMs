@@ -1,0 +1,34 @@
+# Environment
+.env
+.env.*
+**/__pycache__/
+.venv/
+
+# Python
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Project data and config (private)
+data/
+settings.yaml
+tmp/
+cache/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.local.json
+.idea/
+*.swp
+
+# Logs
+*.log
